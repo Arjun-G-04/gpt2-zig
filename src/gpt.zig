@@ -3,16 +3,15 @@ const vocab_size: u8 = 65;
 const block_size: u8 = 256;
 const n_layer: u8 = 6;
 
-const Block = struct {
-    something: u8
-}; 
+// To-Do
+const Linear = struct {};
 
-const Transformer = struct {
-    wte: [vocab_size][n_embd]f16,
-    wpe: [block_size][n_embd]f16,
-    h: [n_layer]Block
-};
+// To-Do
+const LayerNorm = struct {};
 
-const GPT = struct {
-    transformer: Transformer
-};
+// To-Do
+const Block = struct {};
+
+const Transformer = struct { wte: [vocab_size][n_embd]f16, wpe: [block_size][n_embd]f16, h: [n_layer]Block, ln_f: LayerNorm };
+
+const GPT = struct { transformer: Transformer, lm_head: Linear };
