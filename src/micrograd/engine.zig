@@ -120,3 +120,18 @@ pub const Value = struct {
         return self.add(negative_other, a);
     }
 };
+
+pub fn createValuesArray(i: []const f32, a: std.mem.Allocator) !std.ArrayList(*Value) {
+    // ArrayList itself is just usually 24 bytes of metadata.
+    // It stores where the actual slice is located and what is
+    // its size. So there isn't a need to create this "metadata"
+    // in the heap. Thus, its fine to return it as value and it 
+    // will just copy that tiny metadata to the main fn.
+    var array = std.ArrayList(*Value){};
+    for (i) |d| {
+        const p = try a.create(Value);
+        p.* = Value{.data = d};
+        try array.append(a, p);
+    }
+    return array;
+}
