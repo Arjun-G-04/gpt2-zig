@@ -62,6 +62,9 @@ pub const Value = struct {
         try topo_sort(a, self, &visited, &sorted_nodes);
         std.mem.reverse(*Value, sorted_nodes.items);
 
+        // grad of the last node with itself is 1.
+        self.grad = 1;
+        
         for (sorted_nodes.items) |node| {
             const f = node.backward_fn orelse continue;
             f(node);
@@ -75,7 +78,7 @@ pub const Value = struct {
     // useless. That's why we are giving the input arguments directly as pointers itself and
     // we are also allocating the new Value in a heap of the main program and returning a pointer
     // to that value in that main persistant heap.
-    pub fn add(self: *Value, other: *Value, a: std.mem.Allocator) !*Value {
+    pub fn add(self: *Value, a: std.mem.Allocator, other: *Value) !*Value {
         // try is used for running a function that returns an Error Union. It means that the function
         // can succeed or it can fail and return an error. try is shorthand for: if the fn succeeds,
         // then return the value, if it fails then propagate the error, as if error made in this line.
@@ -84,7 +87,7 @@ pub const Value = struct {
         return p;
     }
 
-    pub fn mul(self: *Value, other: *Value, a: std.mem.Allocator) !*Value {
+    pub fn mul(self: *Value, a: std.mem.Allocator, other: *Value) !*Value {
         const p = try a.create(Value);
         p.* = .{ .data = self.data * other.data, .children = .{ self, other }, .backward_fn = mulBackward };
         return p;
@@ -102,7 +105,7 @@ pub const Value = struct {
         return p;
     }
 
-    pub fn pow(self: *Value, power: f32, a: std.mem.Allocator) !*Value {
+    pub fn pow(self: *Value, a: std.mem.Allocator, power: f32) !*Value {
         const p = try a.create(Value);
         p.* = .{
             .data = std.math.pow(f32, self.data, power),
@@ -113,15 +116,15 @@ pub const Value = struct {
         return p;
     }
 
-    pub fn sub(self: *Value, other: *Value, a: std.mem.Allocator) !*Value {
+    pub fn sub(self: *Value, a: std.mem.Allocator, other: *Value) !*Value {
         const minus_one = try a.create(Value);
         minus_one.* = .{ .data = -1 };
-        const negative_other = try minus_one.mul(other, a);
-        return self.add(negative_other, a);
+        const negative_other = try minus_one.mul(a, other);
+        return self.add(a, negative_other);
     }
 };
 
-pub fn createValuesArray(i: []const f32, a: std.mem.Allocator) !std.ArrayList(*Value) {
+pub fn createValuesArray(a: std.mem.Allocator, i: []const f32) !std.ArrayList(*Value) {
     // ArrayList itself is just usually 24 bytes of metadata.
     // It stores where the actual slice is located and what is
     // its size. So there isn't a need to create this "metadata"

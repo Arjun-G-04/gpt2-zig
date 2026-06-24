@@ -33,25 +33,21 @@ pub const Neuron = struct {
     // cast to []x. Since compute is read only and creates a new Value "o"
     // and we are not modifying x in any way, it makes sense to define it
     // as []const *Value although []*Value also will work.
-    pub fn compute(self: *Neuron, x: []const *Value, a: std.mem.Allocator) !*Value {
+    pub fn compute(self: *Neuron, a: std.mem.Allocator, x: []const *Value) !*Value {
         if (self.w.?.items.len != x.len) {
             return error.SizeMisMatch;
         }
 
-        var o = try a.create(Value);
-        o.* = Value{.data = 0};
-        o = try o.add(self.b.?, a);
+        var o = self.b.?;
         for (self.w.?.items, x) |w, i| {
-            var m = try a.create(Value);
-            m = try w.mul(i, a);
-            o = try o.add(m, a);
+            o = try o.add(a, try w.mul(a, i));
         }
         
         return o;
     }
 };
 
-pub fn createNeuronsArray(aSize: usize, nSize: usize, a: std.mem.Allocator) !std.ArrayList(*Neuron) {
+pub fn createNeuronsArray(a: std.mem.Allocator, aSize: usize, nSize: usize) !std.ArrayList(*Neuron) {
     var array = std.ArrayList(*Neuron){};
     for (0..aSize) |_| {
         const p = try a.create(Neuron);
@@ -65,10 +61,10 @@ pub fn createNeuronsArray(aSize: usize, nSize: usize, a: std.mem.Allocator) !std
 pub const Layer = struct {
     neurons: std.ArrayList(*Neuron),
 
-    pub fn compute(self: *Layer, x: []*Value, a: std.mem.Allocator) !std.ArrayList(*Value){
+    pub fn compute(self: *Layer, a: std.mem.Allocator,  x: []*Value) !std.ArrayList(*Value){
         var o = std.ArrayList(*Value){};
         for (self.neurons.items) |neuron| {
-            const y = try neuron.compute(x, a);
+            const y = try neuron.compute(a, x);
             try o.append(a, y);
         }
         return o;
@@ -78,11 +74,36 @@ pub const Layer = struct {
 pub const MLP = struct {
     layers: std.ArrayList(*Layer),
 
-    pub fn compute(self: *MLP, x: []*Value, a: std.mem.Allocator) !std.ArrayList(*Value) {
+    pub fn compute(self: *MLP, a: std.mem.Allocator, x: []*Value) !std.ArrayList(*Value) {
         var curr = std.ArrayList(*Value){.items = x};
         for (self.layers.items) |layer| {
-            curr = try layer.compute(curr.items, a);
+            curr = try layer.compute(a, curr.items);
         }
         return curr;
     }
+
+    pub fn gradientDescent(self: *MLP, step: f32) void {
+        for (self.layers.items) |layer| {
+            for (layer.neurons.items) |neuron| {
+                const bias = neuron.b.?;
+                bias.data -= step * bias.grad;
+                bias.grad = 0;
+                for (neuron.w.?.items) |weight| {
+                    weight.data -= step * weight.grad;
+                    weight.grad = 0;
+                }
+            }
+        }
+    }
 };
+
+pub fn getLossValue(a:std.mem.Allocator, output: []const *Value, truth: []const f32) !*Value {
+    var l = try a.create(Value);
+    l.* = Value{.data = 0};
+    for (output, truth) |o, t| {
+        const tp = try a.create(Value);
+        tp.* = Value{.data = t};
+        l = try l.add(a, try (try o.sub(a, tp)).pow(a, 2));
+    }
+    return l;
+}
