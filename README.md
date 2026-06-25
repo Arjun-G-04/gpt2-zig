@@ -5,3 +5,11 @@ The goal of this experiment/project is to implement GPT-2 from scratch in zig an
 I will mark comments within the code itself as my notes of learning. If there isn't a comment in a place, then it might be a very obvious statement that I know.
 
 I am following the [GOAT](https://www.youtube.com/playlist?list=PLAqhIrjkxbuWI23v9cThsA9GvCAUhRvKZ) and using LLMs for exploring zig related info and the exact implementation details of Python methods used in the code (from pytorch, etc.).
+
+## Milestones
+
+### 25-06-26 - micrograd completed
+- forward pass, back propagation.
+- ability to train a neural network (MLP) via gradient descent.
+- reasonable memory management.
+- maintainable code.

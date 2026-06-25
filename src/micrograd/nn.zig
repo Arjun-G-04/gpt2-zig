@@ -3,24 +3,26 @@ const engine = @import("engine.zig");
 const Value = engine.Value;
 
 pub const Neuron = struct {
-    b: ?*Value = null,
-    w: ?std.ArrayList(*Value) = null,
+    b: *Value,
+    w: []*Value,
 
-    pub fn init(self: *Neuron, size: usize, a: std.mem.Allocator) !void {
-        var seed: [32]u8 = undefined;
-        std.crypto.random.bytes(&seed);
-        var prng = std.Random.DefaultCsprng.init(seed);
-        const random = prng.random();
-
-        self.w = std.ArrayList(*Value){};
+    pub fn init(a: std.mem.Allocator, size: usize, random: std.Random) !*Neuron {
+        // Set random weights
+        var w = std.ArrayList(*Value){};
         for (0..size) |_| {
             const r = try a.create(Value);
             r.* = Value{.data = -1 + 2 * random.float(f32)};
-            try self.w.?.append(a, r);
+            try w.append(a, r);
         }
+
+        // Set random bias
         const b = try a.create(Value);
         b.* = Value{.data = -1 + 2 * random.float(f32)};
-        self.b = b;
+
+        // Create the Neuron in heap (persistent)
+        const n = try a.create(Neuron);
+        n.* = Neuron{.b = b, .w = w.items};
+        return n;
     }
 
     // i) Rather than passing the ArrayList or passing pointer to ArrayList,
@@ -34,12 +36,13 @@ pub const Neuron = struct {
     // and we are not modifying x in any way, it makes sense to define it
     // as []const *Value although []*Value also will work.
     pub fn compute(self: *Neuron, a: std.mem.Allocator, x: []const *Value) !*Value {
-        if (self.w.?.items.len != x.len) {
+        if (self.w.len != x.len) {
             return error.SizeMisMatch;
         }
 
-        var o = self.b.?;
-        for (self.w.?.items, x) |w, i| {
+        // bias + dot product of weights and input
+        var o = self.b;
+        for (self.w, x) |w, i| {
             o = try o.add(a, try w.mul(a, i));
         }
         
@@ -47,48 +50,46 @@ pub const Neuron = struct {
     }
 };
 
-pub fn createNeuronsArray(a: std.mem.Allocator, aSize: usize, nSize: usize) !std.ArrayList(*Neuron) {
+pub fn createNeuronsSlice(a: std.mem.Allocator, random: std.Random, aSize: usize, nSize: usize) ![]*Neuron {
     var array = std.ArrayList(*Neuron){};
     for (0..aSize) |_| {
-        const p = try a.create(Neuron);
-        p.* = Neuron{};
-        try p.init(nSize, a);
+        const p = try Neuron.init(a, nSize, random);
         try array.append(a, p);
     }
-    return array;
+    return array.items;
 }
 
 pub const Layer = struct {
-    neurons: std.ArrayList(*Neuron),
+    neurons: []*Neuron,
 
-    pub fn compute(self: *Layer, a: std.mem.Allocator,  x: []*Value) !std.ArrayList(*Value){
+    pub fn compute(self: *Layer, a: std.mem.Allocator,  x: []const *Value) ![]*Value {
         var o = std.ArrayList(*Value){};
-        for (self.neurons.items) |neuron| {
+        for (self.neurons) |neuron| {
             const y = try neuron.compute(a, x);
             try o.append(a, y);
         }
-        return o;
+        return o.items;
     }
 };
 
 pub const MLP = struct {
-    layers: std.ArrayList(*Layer),
+    layers: []const *Layer,
 
-    pub fn compute(self: *MLP, a: std.mem.Allocator, x: []*Value) !std.ArrayList(*Value) {
-        var curr = std.ArrayList(*Value){.items = x};
-        for (self.layers.items) |layer| {
-            curr = try layer.compute(a, curr.items);
+    pub fn compute(self: *MLP, a: std.mem.Allocator, x: []const *Value) ![]const *Value {
+        var curr = x;
+        for (self.layers) |layer| {
+            curr = try layer.compute(a, curr);
         }
         return curr;
     }
 
     pub fn gradientDescent(self: *MLP, step: f32) void {
-        for (self.layers.items) |layer| {
-            for (layer.neurons.items) |neuron| {
-                const bias = neuron.b.?;
+        for (self.layers) |layer| {
+            for (layer.neurons) |neuron| {
+                const bias = neuron.b;
                 bias.data -= step * bias.grad;
                 bias.grad = 0;
-                for (neuron.w.?.items) |weight| {
+                for (neuron.w) |weight| {
                     weight.data -= step * weight.grad;
                     weight.grad = 0;
                 }

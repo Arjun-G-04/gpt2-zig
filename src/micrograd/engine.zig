@@ -1,40 +1,33 @@
 const std = @import("std");
 
 fn addBackward(v: *Value) void {
-    const children = v.children.?;
-    children[0].?.grad += 1 * v.grad;
-    children[1].?.grad += 1 * v.grad;
+    v.children[0].?.grad += 1 * v.grad;
+    v.children[1].?.grad += 1 * v.grad;
 }
 
 fn mulBackward(v: *Value) void {
-    const children = v.children.?;
-    children[0].?.grad += children[1].?.data * v.grad;
-    children[1].?.grad += children[0].?.data * v.grad;
+    v.children[0].?.grad += v.children[1].?.data * v.grad;
+    v.children[1].?.grad += v.children[0].?.data * v.grad;
 }
 
 fn tanhBackward(v: *Value) void {
-    const children = v.children.?;
-    children[0].?.grad += (1 - std.math.pow(f32, v.data, 2)) * v.grad;
+    v.children[0].?.grad += (1 - std.math.pow(f32, v.data, 2)) * v.grad;
 }
 
 fn expBackward(v: *Value) void {
-    const children = v.children.?;
-    children[0].?.grad += v.data * v.grad;
+    v.children[0].?.grad += v.data * v.grad;
 }
 
 fn powBackward(v: *Value) void {
-    const children = v.children.?;
     const p = v.power.?;
-    children[0].?.grad += (p * std.math.pow(f32, children[0].?.data, p - 1)) * v.grad;
+    v.children[0].?.grad += (p * std.math.pow(f32, v.children[0].?.data, p - 1)) * v.grad;
 }
 
 fn topo_sort(a: std.mem.Allocator, curr: *Value, visited: *std.AutoHashMap(*Value, bool), sorted_nodes: *std.ArrayList(*Value)) !void {
     if (visited.contains(curr)) return;
-    if (curr.children) |children| {
-        for (children) |opt_node| {
-            if (opt_node) |node| {
-                try topo_sort(a, node, visited, sorted_nodes);
-            }
+    for (curr.children) |opt_node| {
+        if (opt_node) |node| {
+            try topo_sort(a, node, visited, sorted_nodes);
         }
     }
     try sorted_nodes.append(a, curr);
@@ -49,7 +42,7 @@ fn topo_sort(a: std.mem.Allocator, curr: *Value, visited: *std.AutoHashMap(*Valu
 pub const Value = struct {
     data: f32,
     grad: f32 = 0,
-    children: ?[2]?*Value = null,
+    children: [2]?*Value = .{null, null},
     backward_fn: ?*const fn (self: *Value) void = null,
     power: ?f32 = null,
 
@@ -124,17 +117,23 @@ pub const Value = struct {
     }
 };
 
-pub fn createValuesArray(a: std.mem.Allocator, i: []const f32) !std.ArrayList(*Value) {
+pub fn createValuesSlice(a: std.mem.Allocator, i: []const f32) ![]*Value {
     // ArrayList itself is just usually 24 bytes of metadata.
     // It stores where the actual slice is located and what is
     // its size. So there isn't a need to create this "metadata"
     // in the heap. Thus, its fine to return it as value and it 
     // will just copy that tiny metadata to the main fn.
+    // 
+    // Additional Note: Previously I was using ArrayList here.
+    // However, as this values "array" is going to be read only 
+    // and won't be needed to append or modify after creation
+    // we can just return the slice and use the slice itself
+    // in the main program.
     var array = std.ArrayList(*Value){};
     for (i) |d| {
         const p = try a.create(Value);
         p.* = Value{.data = d};
         try array.append(a, p);
     }
-    return array;
+    return array.items;
 }
