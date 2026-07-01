@@ -42,7 +42,7 @@ fn topo_sort(a: std.mem.Allocator, curr: *Value, visited: *std.AutoHashMap(*Valu
 pub const Value = struct {
     data: f32,
     grad: f32 = 0,
-    children: [2]?*Value = .{null, null},
+    children: [2]?*Value = .{ null, null },
     backward_fn: ?*const fn (self: *Value) void = null,
     power: ?f32 = null,
 
@@ -57,7 +57,7 @@ pub const Value = struct {
 
         // grad of the last node with itself is 1.
         self.grad = 1;
-        
+
         for (sorted_nodes.items) |node| {
             const f = node.backward_fn orelse continue;
             f(node);
@@ -121,18 +121,18 @@ pub fn createValuesSlice(a: std.mem.Allocator, i: []const f32) ![]*Value {
     // ArrayList itself is just usually 24 bytes of metadata.
     // It stores where the actual slice is located and what is
     // its size. So there isn't a need to create this "metadata"
-    // in the heap. Thus, its fine to return it as value and it 
+    // in the heap. Thus, its fine to return it as value and it
     // will just copy that tiny metadata to the main fn.
-    // 
+    //
     // Additional Note: Previously I was using ArrayList here.
-    // However, as this values "array" is going to be read only 
+    // However, as this values "array" is going to be read only
     // and won't be needed to append or modify after creation
     // we can just return the slice and use the slice itself
     // in the main program.
     var array = std.ArrayList(*Value){};
     for (i) |d| {
         const p = try a.create(Value);
-        p.* = Value{.data = d};
+        p.* = Value{ .data = d };
         try array.append(a, p);
     }
     return array.items;

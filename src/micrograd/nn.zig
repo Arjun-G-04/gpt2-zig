@@ -11,17 +11,17 @@ pub const Neuron = struct {
         var w = std.ArrayList(*Value){};
         for (0..size) |_| {
             const r = try a.create(Value);
-            r.* = Value{.data = -1 + 2 * random.float(f32)};
+            r.* = Value{ .data = -1 + 2 * random.float(f32) };
             try w.append(a, r);
         }
 
         // Set random bias
         const b = try a.create(Value);
-        b.* = Value{.data = -1 + 2 * random.float(f32)};
+        b.* = Value{ .data = -1 + 2 * random.float(f32) };
 
         // Create the Neuron in heap (persistent)
         const n = try a.create(Neuron);
-        n.* = Neuron{.b = b, .w = w.items};
+        n.* = Neuron{ .b = b, .w = w.items };
         return n;
     }
 
@@ -30,8 +30,8 @@ pub const Neuron = struct {
     // Because that's the only thing required here, sending the ArrayList
     // i.e. the metadata the contains the items is just a tiny overhead
     // compared to sending the slice directly.
-    // 
-    // ii) []x can be cast to []const x. But []const x can't be 
+    //
+    // ii) []x can be cast to []const x. But []const x can't be
     // cast to []x. Since compute is read only and creates a new Value "o"
     // and we are not modifying x in any way, it makes sense to define it
     // as []const *Value although []*Value also will work.
@@ -45,7 +45,7 @@ pub const Neuron = struct {
         for (self.w, x) |w, i| {
             o = try o.add(a, try w.mul(a, i));
         }
-        
+
         return o;
     }
 };
@@ -62,7 +62,7 @@ pub fn createNeuronsSlice(a: std.mem.Allocator, random: std.Random, aSize: usize
 pub const Layer = struct {
     neurons: []*Neuron,
 
-    pub fn compute(self: *Layer, a: std.mem.Allocator,  x: []const *Value) ![]*Value {
+    pub fn compute(self: *Layer, a: std.mem.Allocator, x: []const *Value) ![]*Value {
         var o = std.ArrayList(*Value){};
         for (self.neurons) |neuron| {
             const y = try neuron.compute(a, x);
@@ -98,12 +98,12 @@ pub const MLP = struct {
     }
 };
 
-pub fn getLossValue(a:std.mem.Allocator, output: []const *Value, truth: []const f32) !*Value {
+pub fn getLossValue(a: std.mem.Allocator, output: []const *Value, truth: []const f32) !*Value {
     var l = try a.create(Value);
-    l.* = Value{.data = 0};
+    l.* = Value{ .data = 0 };
     for (output, truth) |o, t| {
         const tp = try a.create(Value);
-        tp.* = Value{.data = t};
+        tp.* = Value{ .data = t };
         l = try l.add(a, try (try o.sub(a, tp)).pow(a, 2));
     }
     return l;
