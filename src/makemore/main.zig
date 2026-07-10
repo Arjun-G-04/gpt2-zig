@@ -3,23 +3,48 @@ const std = @import("std");
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    const a = gpa.allocator();
 
     // load the file into heap memory
-    const content = try std.fs.cwd().readFileAlloc(allocator, "names.txt", 5 * 1024 * 1024);
-    defer allocator.free(content);
+    const content = try std.fs.cwd().readFileAlloc(a, "names.txt", 5 * 1024 * 1024);
+    defer a.free(content);
 
+    // inputs and corresponding outputs of the dataset. 0 = . & 1-26 = a-z (convenience)
+    var xa = std.ArrayList(u8){};
+    defer xa.deinit(a);
+    var ya = std.ArrayList(u8){};
+    defer ya.deinit(a);
+
+    // populate the xa and ya
+    var words = std.mem.splitScalar(u8, content, '\n');
+    var c: usize = 0;
+    while (words.next()) |word| {
+        try xa.append(a, 0);
+        try ya.append(a, word[0]-'a'+1);
+        for (0..word.len-1) |i| {
+            try xa.append(a, word[i]-'a'+1);
+            try ya.append(a, word[i+1]-'a'+1);
+        }
+        try xa.append(a, word[word.len-1]-'a'+1);
+        try ya.append(a, 0);
+
+        c += 1;
+        if (c > 2) break;
+    }
+
+    // one-hot encode the input array
+    var xenc = std.ArrayList([27]u8){};
+    defer xenc.deinit(a);
+    for (xa.items) |x| {
+        var s: [27]u8 = .{0} ** 27;
+        s[x] = 1;
+        try xenc.append(a, s);
+    }
     
-    var lines = std.mem.splitScalar(u8, content, '\n');
-    var i: usize = 0;
-    while (lines.next()) |line| {
-        for (line) |char| {
-            std.debug.print("char: {d}\n", .{char});
+    for (xenc.items) |x| {
+        for (x) |b| {
+            std.debug.print("{d}", .{b});
         }
-        std.debug.print("line {d}: {s}\n", .{i, line});
-        i += 1;
-        if (i > 9) {
-            break;
-        }
+        std.debug.print("\n", .{});
     }
 }
