@@ -8,7 +8,7 @@ pub const Neuron = struct {
 
     pub fn init(a: std.mem.Allocator, size: usize, random: std.Random) !*Neuron {
         // Set random weights
-        var w = std.ArrayList(*Value){};
+        var w: std.ArrayList(*Value) = .empty;
         for (0..size) |_| {
             const r = try a.create(Value);
             r.* = Value{ .data = -1 + 2 * random.float(f32) };
@@ -51,7 +51,7 @@ pub const Neuron = struct {
 };
 
 pub fn createNeuronsSlice(a: std.mem.Allocator, random: std.Random, aSize: usize, nSize: usize) ![]*Neuron {
-    var array = std.ArrayList(*Neuron){};
+    var array: std.ArrayList(*Neuron) = .empty;
     for (0..aSize) |_| {
         const p = try Neuron.init(a, nSize, random);
         try array.append(a, p);
@@ -63,7 +63,7 @@ pub const Layer = struct {
     neurons: []*Neuron,
 
     pub fn compute(self: *Layer, a: std.mem.Allocator, x: []const *Value) ![]*Value {
-        var o = std.ArrayList(*Value){};
+        var o: std.ArrayList(*Value) = .empty;
         for (self.neurons) |neuron| {
             const y = try neuron.compute(a, x);
             try o.append(a, y);
