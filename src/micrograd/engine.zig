@@ -23,6 +23,10 @@ fn powBackward(v: *Value) void {
     v.children[0].?.grad += (p * std.math.pow(f32, v.children[0].?.data, p - 1)) * v.grad;
 }
 
+fn logBackward(v: *Value) void {
+    v.children[0].?.grad += v.grad / v.children[0].?.data;
+}
+
 fn topo_sort(a: std.mem.Allocator, curr: *Value, visited: *std.AutoHashMap(*Value, bool), sorted_nodes: *std.ArrayList(*Value)) !void {
     if (visited.contains(curr)) return;
     for (curr.children) |opt_node| {
@@ -48,7 +52,7 @@ pub const Value = struct {
 
     pub fn backward(self: *Value, a: std.mem.Allocator) !void {
         var visited = std.AutoHashMap(*Value, bool).init(a);
-        var sorted_nodes = std.ArrayList(*Value){};
+        var sorted_nodes: std.ArrayList(*Value) = .empty;
         defer visited.deinit();
         defer sorted_nodes.deinit(a);
 
@@ -114,6 +118,16 @@ pub const Value = struct {
         minus_one.* = .{ .data = -1 };
         const negative_other = try minus_one.mul(a, other);
         return self.add(a, negative_other);
+    }
+
+    pub fn log(self: *Value, a: std.mem.Allocator) !*Value {
+        const p = try a.create(Value);
+        p.* = .{
+            .data = std.math.log(f32, std.math.e, self.data),
+            .children = .{self, null},
+            .backward_fn = logBackward
+        };
+        return p;
     }
 };
 
