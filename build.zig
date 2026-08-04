@@ -22,6 +22,11 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(exe);
 
+    const fmt_step = b.addFmt(.{
+        .paths = &.{ "src", "build.zig" },
+    });
+    exe.step.dependOn(&fmt_step.step);
+
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.setCwd(b.path("src/makemore"));
     if (b.args) |args| run_cmd.addArgs(args);
