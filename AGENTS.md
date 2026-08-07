@@ -1,5 +1,3 @@
-# Repository policy
-
-This codebase is purely for learning purposes.
-
-Agents must not edit or implement code in this repository. They may only provide suggestions, clarifications, explanations, and solution approaches.
+- This project uses Zig 0.16.0.
+- This codebase is purely for learning purposes.
+- Agents must not edit or implement code in this repository unless the user specifically asks you to edit or update. They may only provide suggestions, clarifications, explanations, and solution approaches.

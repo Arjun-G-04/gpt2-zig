@@ -3,6 +3,7 @@ const micrograd = @import("micrograd");
 const nn = micrograd.nn;
 const engine = micrograd.engine;
 const Value = engine.Value;
+const Tensor = engine.Tensor;
 
 pub fn main(init: std.process.Init) !void {
     const io = init.io;
@@ -64,7 +65,7 @@ pub fn main(init: std.process.Init) !void {
     // training
     const start = std.Io.Clock.now(.awake, io);
     var minusOne = Value{ .data = -1 };
-    const epoch = 100;
+    const epoch = 0;
     for (1..epoch + 1) |run| {
         var loss = try ta.create(Value);
         loss.* = .{ .data = 0 };
@@ -79,7 +80,7 @@ pub fn main(init: std.process.Init) !void {
                 try counts.append(ta, try logit.exp(ta));
             }
 
-            // normalize to get probabilities
+            // normalize to get probabilities; exponentiation + normalization -> softmax
             var sum = try ta.create(Value);
             sum.* = .{ .data = 0 };
             for (counts.items) |i| {
@@ -108,4 +109,33 @@ pub fn main(init: std.process.Init) !void {
     }
     const duration = start.untilNow(io, .awake);
     std.debug.print("Time elapsed: {} ms\n", .{duration.toMilliseconds()});
+
+    var adata = [_]f32{ 1, 2, 3, 4 };
+    var agrad = [_]f32{0} ** 4;
+    var a = Tensor{
+        .data = adata[0..],
+        .grad = agrad[0..],
+        .rows = 2,
+        .cols = 2,
+    };
+
+    var bdata = [_]f32{ 2, 2 };
+    var bgrad = [_]f32{0} ** 2;
+    var b = Tensor{
+        .data = bdata[0..],
+        .grad = bgrad[0..],
+        .rows = 2,
+        .cols = 1,
+    };
+
+    const c = try a.matmul(ta, &b);
+    try c.backward(ta);
+
+    a.print(.data);
+    b.print(.data);
+    c.print(.data);
+
+    a.print(.grad);
+    b.print(.grad);
+    c.print(.grad);
 }

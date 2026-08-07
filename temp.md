@@ -1,0 +1,4 @@
+-> implement the same functionalities of Value but for a 2D Tensor now.
+-> mul will become matmul now. remaining operations are straightforward and are applied to all items (if single operand like exp, log)
+-> we dont have to create a "neuron". we can have weights and biases as separate tensors and do operations on them.
+-> using this, the input can now be batched as a tensor like this -> lets say batch size is 10. input tensor will be [10 27]; weights [27 27] where a column "represents" 1 neuron, so we have 27 neurons. [10 27] x [27 27] we get [10 x 27] then add bias tensor [27 1] which is added to each row and finally [10 x 27] where each row is logits for corresponding input row.

@@ -32,15 +32,23 @@ fn divBackward(v: *Value) void {
     v.children[1].?.grad += (-v.children[0].?.data / std.math.pow(f32, v.children[1].?.data, 2)) * v.grad;
 }
 
-fn topo_sort(a: std.mem.Allocator, curr: *Value, visited: *std.AutoHashMap(*Value, bool), sorted_nodes: *std.ArrayList(*Value)) !void {
+fn getValueChildren(v: *Value) [2]?*Value {
+    return v.children;
+}
+
+fn getTensorChildren(t: *Tensor) [2]?*Tensor {
+    return t.children;
+}
+
+fn topo_sort(comptime T: type, a: std.mem.Allocator, curr: *T, getTChildren: fn (*T) [2]?*T, visited: *std.AutoHashMap(*T, bool), sorted_nodes: *std.ArrayList(*T)) !void {
     if (visited.contains(curr)) return;
-    for (curr.children) |opt_node| {
+    try visited.put(curr, true);
+    for (getTChildren(curr)) |opt_node| {
         if (opt_node) |node| {
-            try topo_sort(a, node, visited, sorted_nodes);
+            try topo_sort(T, a, node, getTChildren, visited, sorted_nodes);
         }
     }
     try sorted_nodes.append(a, curr);
-    try visited.put(curr, true);
 }
 
 // Note about pointers.
@@ -61,7 +69,7 @@ pub const Value = struct {
         defer visited.deinit();
         defer sorted_nodes.deinit(a);
 
-        try topo_sort(a, self, &visited, &sorted_nodes);
+        try topo_sort(Value, a, self, getValueChildren, &visited, &sorted_nodes);
         std.mem.reverse(*Value, sorted_nodes.items);
 
         // grad of the last node with itself is 1.
@@ -158,3 +166,134 @@ pub fn createValuesSlice(a: std.mem.Allocator, i: []const f32) ![]*Value {
     }
     return array.items;
 }
+
+// lets rock with Tensorsssss (2nd order i.e. 2D for now. nth order tensor later)
+
+fn tensorAddBackward(t: *Tensor) void {
+    for (t.grad, 0..) |g, i| {
+        t.children[0].?.grad[i] += g;
+        t.children[1].?.grad[i] += g;
+    }
+}
+
+fn tensorRowBroadcastBackward(t: *Tensor) void {
+    for (t.grad, 0..) |g, i| {
+        t.children[0].?.grad[i] += g;
+        t.children[1].?.grad[i % t.children[1].?.cols] += g;
+    }
+}
+
+fn tensorColBroadcastBackward(t: *Tensor) void {
+    for (t.grad, 0..) |g, i| {
+        t.children[0].?.grad[i] += g;
+        t.children[1].?.grad[i / t.children[1].?.rows] += g;
+    }
+}
+
+fn matmulBackward(t: *Tensor) void {
+    const left = t.children[0].?;
+    const right = t.children[1].?;
+
+    for (0..left.rows) |i| {
+        for (0..right.cols) |j| {
+            for (0..left.cols) |k| {
+                left.put(.grad, i, k, left.get(.grad, i, k) + t.get(.grad, i, j) * right.get(.data, k, j));
+                right.put(.grad, k, j, right.get(.grad, k, j) + t.get(.grad, i, j) * left.get(.data, i, k));
+            }
+        }
+    }
+}
+
+const Item = enum { data, grad };
+
+pub const Tensor = struct {
+    data: []f32,
+    grad: []f32,
+    rows: usize,
+    cols: usize,
+    children: [2]?*Tensor = .{ null, null },
+    backwardFn: ?*const fn (self: *Tensor) void = null,
+
+    pub fn get(self: *Tensor, item: Item, r: usize, c: usize) f32 {
+        const items = if (item == .data) self.data else self.grad;
+        // index of an element is: row_no * col_size + col_no
+        return items[r * self.cols + c];
+    }
+
+    pub fn put(self: *Tensor, item: Item, r: usize, c: usize, v: f32) void {
+        const items = if (item == .data) self.data else self.grad;
+        items[r * self.cols + c] = v;
+    }
+
+    pub fn print(self: *Tensor, item: Item) void {
+        const items = if (item == .data) self.data else self.grad;
+        for (items, 0..) |d, i| {
+            std.debug.print("{d:.2} ", .{d});
+            if (i % self.cols == self.cols - 1) std.debug.print("\n", .{});
+        }
+        std.debug.print("\n", .{});
+    }
+
+    pub fn backward(self: *Tensor, a: std.mem.Allocator) !void {
+        for (0..self.grad.len) |i| self.grad[i] = 1;
+        var visited = std.AutoHashMap(*Tensor, bool).init(a);
+        var sorted: std.ArrayList(*Tensor) = .empty;
+        try topo_sort(Tensor, a, self, getTensorChildren, &visited, &sorted);
+        std.mem.reverse(*Tensor, sorted.items);
+        for (sorted.items) |node| {
+            const f = node.backwardFn orelse continue;
+            f(node);
+        }
+    }
+
+    pub fn add(self: *Tensor, a: std.mem.Allocator, other: *Tensor) !*Tensor {
+        const output = try a.create(Tensor);
+        var data: std.ArrayList(f32) = .empty;
+        var backwardFn: ?*const fn (self: *Tensor) void = null;
+        const grad = try a.alloc(f32, self.rows * self.cols);
+        @memset(grad, 0);
+
+        if (other.rows == self.rows and other.cols == self.cols) {
+            for (self.data, other.data) |x, y| try data.append(a, x + y);
+            backwardFn = tensorAddBackward;
+        } else if (other.rows == self.rows and other.cols == 1) {
+            for (self.data, 0..) |x, i| try data.append(a, x + other.data[i % other.rows]);
+            backwardFn = tensorColBroadcastBackward;
+        } else if (other.cols == self.cols and other.rows == 1) {
+            for (self.data, 0..) |x, i| try data.append(a, x + other.data[i % other.cols]);
+            backwardFn = tensorRowBroadcastBackward;
+        } else {
+            a.destroy(output);
+            return error.ShapeMismatch;
+        }
+
+        output.* = .{ .data = data.items, .grad = grad, .rows = self.rows, .cols = self.cols, .children = .{ self, other }, .backwardFn = backwardFn };
+        return output;
+    }
+
+    pub fn matmul(self: *Tensor, a: std.mem.Allocator, other: *Tensor) !*Tensor {
+        if (self.cols != other.rows) return error.ShapeMismatch;
+
+        const output = try a.create(Tensor);
+        var data: std.ArrayList(f32) = .empty;
+        const grad = try a.alloc(f32, self.rows * other.cols);
+        @memset(grad, 0);
+
+        // for each row in self
+        for (0..self.rows) |i| {
+            // for each col in other
+            for (0..other.cols) |j| {
+                var sum: f32 = 0;
+                // taking each item of the current row in self
+                for (0..self.cols) |k| {
+                    // multiplying the corresponding element in col of other
+                    sum += self.get(.data, i, k) * other.get(.data, k, j);
+                }
+                try data.append(a, sum);
+            }
+        }
+
+        output.* = .{ .data = data.items, .grad = grad, .rows = self.rows, .cols = other.cols, .children = .{ self, other }, .backwardFn = matmulBackward };
+        return output;
+    }
+};
